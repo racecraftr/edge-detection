@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"sync"
 )
 
 var (
@@ -29,7 +30,7 @@ func Luminance(aColor color.Color) float64 {
 	alpha /= 257
 
 	// need to convert uint32 to float64
-	return float64(float64(0.299)*float64(red) + float64(0.587)*float64(green) + float64(0.114)*float64(blue)) - float64(alpha)
+	return float64(float64(0.299)*float64(red)+float64(0.587)*float64(green)+float64(0.114)*float64(blue)) - float64(alpha)
 }
 
 // uses sobel gradient instead of simple difference approach. :P
@@ -38,7 +39,7 @@ func FindEdgesV2(img image.Image) PointSet {
 	bounds := img.Bounds()
 	width, height := bounds.Max.X, bounds.Max.Y
 
-	size := width * height - width * 2 - height * 2 + 4
+	size := width*height - width*2 - height*2 + 4
 	px := 0
 	bar := CreateBar(size, "reading pixels...")
 	for y := 1; y < height-1; y++ {
@@ -47,7 +48,7 @@ func FindEdgesV2(img image.Image) PointSet {
 			gradient := [3][3]int{}
 			for i := 0; i < 3; i++ {
 				for j := 0; j < 3; j++ {
-					gradient[i][j] = int(Luminance(img.At(x - 1 + i, y - 1 + i)))
+					gradient[i][j] = int(Luminance(img.At(x-1+i, y-1+i)))
 				}
 			}
 
@@ -58,14 +59,65 @@ func FindEdgesV2(img image.Image) PointSet {
 					gy += gradient[i][j] * vertical[i][j]
 				}
 			}
-			colorCode := int(math.Sqrt(float64(gx * gx + gy * gy)))
+			colorCode := int(math.Sqrt(float64(gx*gx + gy*gy)))
 			if colorCode > 80 {
 				res[Point{x, y}] = true
 			}
 
-			px ++
+			px++
 			bar.Set(px)
 		}
+	}
+	return res
+}
+
+func FindEdgesV2Async(img image.Image) PointSet {
+	res := make(PointSet)
+
+	c := make(chan Point)
+	wg := sync.WaitGroup{}
+
+	bounds := img.Bounds()
+	width, height := bounds.Max.X, bounds.Max.Y
+
+	size := width*height - width*2 - height*2 + 4
+	px := 0
+	bar := CreateBar(size, "reading pixels...")
+	for y := 1; y < height-1; y++ {
+		for x := 1; x < width-1; x++ {
+			wg.Add(1)
+			go func(x, y int, c chan Point) {
+				defer wg.Done()
+				gradient := [3][3]int{}
+				for i := 0; i < 3; i++ {
+					for j := 0; j < 3; j++ {
+						gradient[i][j] = int(Luminance(img.At(x-1+i, y-1+i)))
+					}
+				}
+
+				gx, gy := 0, 0
+				for i := 0; i < 3; i++ {
+					for j := 0; j < 3; j++ {
+						gx += gradient[i][j] * horizontal[i][j]
+						gy += gradient[i][j] * vertical[i][j]
+					}
+				}
+				colorCode := int(math.Sqrt(float64(gx*gx + gy*gy)))
+				if colorCode > 80 {
+					c <- Point{x, y}
+				}
+			}(x, y, c)
+
+			px++
+			bar.Set(px)
+		}
+	}
+	go func() {
+		wg.Wait()
+		close(c)
+	}()
+	for p := range c {
+		res[p] = true
 	}
 	return res
 }
