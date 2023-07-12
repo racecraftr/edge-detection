@@ -33,9 +33,11 @@ func Luminance(aColor color.Color) float64 {
 	return float64(float64(0.299)*float64(red)+float64(0.587)*float64(green)+float64(0.114)*float64(blue)) - float64(alpha)
 }
 
+const BUFSIZE = 0x7fffffff
+
 // uses sobel gradient instead of simple difference approach. :P
-func FindEdgesV2(img image.Image) PointSet {
-	res := make(PointSet)
+func FindEdgesV2(img image.Image) []*Point {
+	res, idx := make([]*Point,BUFSIZE), 0
 	bounds := img.Bounds()
 	width, height := bounds.Max.X, bounds.Max.Y
 
@@ -61,20 +63,21 @@ func FindEdgesV2(img image.Image) PointSet {
 			}
 			colorCode := int(math.Sqrt(float64(gx*gx + gy*gy)))
 			if colorCode > 80 {
-				res[Point{x, y}] = true
+				res[idx] = &Point{x, y}
+				idx ++
 			}
 
 			px++
 			bar.Set(px)
 		}
 	}
-	return res
+	return res[:idx]
 }
 
-func FindEdgesV2Async(img image.Image) PointSet {
-	res := make(PointSet)
+func FindEdgesV2Async(img image.Image) []*Point {
+	res := make([]*Point, BUFSIZE)
 
-	c := make(chan Point)
+	c := make(chan *Point)
 	wg := sync.WaitGroup{}
 
 	bounds := img.Bounds()
@@ -86,7 +89,7 @@ func FindEdgesV2Async(img image.Image) PointSet {
 	for y := 1; y < height-1; y++ {
 		for x := 1; x < width-1; x++ {
 			wg.Add(1)
-			go func(x, y int, c chan Point) {
+			go func(x, y int, c chan *Point) {
 				defer wg.Done()
 				gradient := [3][3]int{}
 				for i := 0; i < 3; i++ {
@@ -104,7 +107,7 @@ func FindEdgesV2Async(img image.Image) PointSet {
 				}
 				colorCode := int(math.Sqrt(float64(gx*gx + gy*gy)))
 				if colorCode > 80 {
-					c <- Point{x, y}
+					c <- &Point{x, y}
 				}
 			}(x, y, c)
 
@@ -116,8 +119,9 @@ func FindEdgesV2Async(img image.Image) PointSet {
 		wg.Wait()
 		close(c)
 	}()
+	idx := 0
 	for p := range c {
-		res[p] = true
+		res[idx] = p
 	}
-	return res
+	return res[:idx]
 }

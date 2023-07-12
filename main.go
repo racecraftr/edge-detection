@@ -42,8 +42,11 @@ var app = &cli.App{
 
 		wrote := 0
 		bar := detect.CreateBar(len(points), "creating image...")
-		for p := range points {
-			resImg.Set(p.X, p.Y, color.White)
+		for _, p := range points {
+			if p == nil {
+				break
+			}
+			resImg.Set(p.X, p.Y, color.RGBA{0xff, 0x0, 0x0, 0xff})
 			wrote++
 			bar.Set(wrote)
 		}

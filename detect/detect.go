@@ -12,8 +12,6 @@ type Point struct {
 	X, Y int
 }
 
-type PointSet map[Point]bool
-
 func getLuma(c color.Color) uint32 {
 	l := color.GrayModel.Convert(c)
 	y, _, _, _ := l.RGBA()
@@ -45,29 +43,32 @@ func CreateBar(maxsize int, desc string) *progressbar.ProgressBar {
 		}))
 }
 
-func FindEdges(img image.Image) PointSet {
+func FindEdges(img image.Image) []*Point {
 	bounds := img.Bounds().Max
 	width, height := bounds.X, bounds.Y
 	size, px := width*height, 0
-	res := make(PointSet)
+	res, idx := make([]*Point, BUFSIZE), 0
 
 	bar := CreateBar(size, "reading pixels...")
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			p := Point{X: x, Y: y}
+			p := &Point{X: x, Y: y}
 			c1 := img.At(x, y)
 			if x < width-1 {
 				c2 := img.At(x+1, y)
 				if isEdge(c1, c2) {
-					res[p] = true
+					res[idx] = p
+					goto END
 				}
 			}
 			if y < height-1 {
 				c2 := img.At(x, y+1)
 				if isEdge(c1, c2) {
-					res[p] = true
+					res[idx] = p
+					goto END
 				}
 			}
+			END:
 			px++
 			bar.Set(px)
 
